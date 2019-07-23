@@ -12,6 +12,7 @@ same instructions are also summarized in [CONTRIBUTING.md].
 ##Collaborators
 
 - Zach Masson
+- Vanessa Vargas-Nguyen
 
 
 ## Data
