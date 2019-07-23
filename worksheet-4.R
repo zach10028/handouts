@@ -10,10 +10,10 @@ block, drug, control, placebo
 ## Gather 
 
 library(tidyr)
-tidy_trial <- ...(trial,
-  key = ...,
-  value = ...,
-  ...)
+tidy_trial <- gather(trial,
+  key = "treatment",
+  value = "response",
+  -block)
 
 ## Spread 
 
@@ -26,58 +26,61 @@ participant,   attr, val
 2          , income,  60
 ")
 
-tidy_survey <- ...(survey,
-  key = ...,
-  value = ...)
+tidy_survey <- spread(survey,
+  key = attr,
+  value = val)
 
 tidy_survey <- spread(survey,
   key = attr,
   value = val,
-  ...)
+  fill = 0)
 
 ## Sample Data 
 
 library(data.table)
 cbp <- fread('data/cbp15co.csv')
-
+str(cbp)
 cbp <- fread(
   'data/cbp15co.csv',
-  ...,
-  ...)
+  na.strings = NULL,
+  colClasses = c(
+    FIPSTATE='character',
+    FIPSCTY='character'))
 
 acs <- fread(
   'data/ACS/sector_ACS_15_5YR_S2413.csv',
   colClasses = c(FIPS = 'character'))
-
+str(acs)
 ## dplyr Functions 
 
-library(...)
-cbp2 <- filter(...,
-  ...,
+
+library(dplyr)
+cbp2 <- filter(cbp,
+  grepl('----', NAICS),
   !grepl('------', NAICS))
 
-library(...)
+library(stringr)
 cbp2 <- filter(cbp,
-  ...)
+  str_detect(NAICS, '[0-9]{2}----'))
 
-cbp3 <- mutate(...,
-  ...)
+cbp3 <- mutate(cbp2,
+  FIPS = str_c(FIPSTATE, FIPSCTY))
 
 cbp3 <- mutate(cbp2,
   FIPS = str_c(FIPSTATE, FIPSCTY),
-  ...)
+  NAICS = str_remove(NAICS, '-+'))
 
-...
+cbp <- cbp %>%
   filter(
     str_detect(NAICS, '[0-9]{2}----')
-  ) ...
+  ) %>%
   mutate(
     FIPS = str_c(FIPSTATE, FIPSCTY),
     NAICS = str_remove(NAICS, '-+')
   )
 
-...
-  ...(
+cbp <- cbp %>%
+  select(
     FIPS,
     NAICS,
     starts_with('N')
@@ -90,19 +93,36 @@ sector <- fread(
   colClasses = c(NAICS = 'character'))
 
 cbp <- cbp %>%
-  ...
+  inner_join(sector)
 
 ## Group By 
 
 cbp_grouped <- cbp %>%
-  ...
-
+  group_by(FIPS, Sector)
+str(cbp_grouped)
 ## Summarize 
 
 cbp <- cbp %>%
   group_by(FIPS, Sector) %>%
-  ...
-  ...
+  select(starts_with('N'), -NAICS) %>%
+  summarize_all(sum)
 
-acs_cbp <- ... %>%
-  ...
+acs_cbp <- cbp %>%
+  inner_join(acs)
+
+## exercises (lesson 4)
+## one
+gather(tidy_survey, key = "attr",
+       value = "val", -participant)
+
+
+
+
+
+
+
+
+
+
+
+
