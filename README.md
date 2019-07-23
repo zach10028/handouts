@@ -5,6 +5,7 @@ mt work at the SESYNC Summer Institute for SES.
 ##Collaborators
 
 - Zach Masson
+- Vanessa Vargas-Nguyen
 
 
 ## Data
