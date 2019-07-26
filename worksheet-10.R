@@ -1,98 +1,188 @@
-## RegEx
-
-library(...)
-library(...)
-
-docs <- ...
+ ## RegEx
 
 library(stringr)
+str_extract_all(
+  'Email info@sesync.org or tweet @SESYNC',
+  '\\b\\S+@\\S+\\b'
+)
+
+
+
+library(tm)
+
+enron <- VCorpus(DirSource("data/enron"))
+email <- enron[[1]]
+
+
+match <- str_match(content(email), '^From: (.*)')
+
 
 txt <- ...
 str_match(txt, '...')
 
-## Extract structured data
+## Data Extraction
 
-for (...) {
-  txt <- content(docs[[i]])
-  match <- str_match(txt, '^From: (.*)')
-  ...
-  ...
-  meta(docs[[i]], "author") <- ...
+enron <- tm_map(enron, function(email) {
+  body <- content(email)
+  match <- str_match(body, '^From: (.*)')
+  match <- na.omit(match)
+  meta(email, 'author') <- match[[1, 2]]
+  return(email)
+})
+
+## Relational Data Exrtraction
+
+get_to <- function(email) {
+  body <- content(email)
+  match <- str_detect(body, '^To:')
+  if (any(match)) {
+    to_start <- which(match)[[1]]
+    match <- str_detect(body, '^Subject:')
+    to_end <- which(match)[[1]] - 1
+    to <- paste(body[to_start:to_end], collapse = '')
+    to <- str_extract_all(to, '\\b\\S+@\\S+\\b')
+    return(unlist(to))
+  } else {
+    return(NA)
+  }
 }
 
-## Extract relational data
+edges <- lapply(enron, FUN = function(email) {
+  from <- meta(email, 'author')
+  to <- get_to(email)
+  return(cbind(from, to))
+})
+edges <- do.call(rbind, edges)
+edges <- na.omit(edges)
+attr(edges, 'na.action') <- NULL
 
-match <- str_match(..., ...)
-subject <- ...
-to <- paste(content(doc)[4:(subject[1] - 1)], collapse='')
-to_list <- ...
+library(network)
 
-library(...)
+g <- network(edges)
+plot(g)
 
-g <- ...
-plot(...)
+## Text Mining
 
-## Isolate unstructured information
+enron <- tm_map(enron, function(email) {
+  body <- content(email)
+  match <- str_detect(body, '^X-FileName:')
+  begin <- which(match)[[1]] + 1
+  match <- str_detect(body, '^[>\\s]*[_\\-]{2}')
+  match <- c(match, TRUE)
+  end <- which(match)[[1]] - 1
+  content(email) <- body[begin:end]
+  return(email)
+})
 
-for (i in seq(docs)) {
-  lines <- content(docs[[i]])
-  ...
-  ...
-  ...
-  repeat_first <- str_match(lines, '--Original Message--')
-  repeat_first <- which(!is.na(repeat_first))
-  message_end <- c(repeat_first - 1, length(lines))[[1]]
-  content(docs[[i]]) <- lines[message_begin:message_end]
-...
+## Cleaning Text
 
+library(magrittr)
 
-## Functions for cleaning strings
+enron_words <- enron %>%
+  tm_map(removePunctuation) %>%
+  tm_map(removeNumbers) %>%
+  tm_map(stripWhitespace)
+email <- enron_words[[2]]
+content(email)
 
-clean_docs <- docs
-clean_docs <- tm_map(clean_docs, ...)
-clean_docs <- tm_map(clean_docs, ...)
-clean_docs <- tm_map(clean_docs, ...)
-
-clean_docs <- tm_map(clean_docs, ...)
-
-collapse <- function(x) {
-  paste(x, collapse = '')
+remove_link <- function(body) {
+  match <- str_detect(body, '(http|www|mailto)')
+  body[!match]
 }
-clean_docs <- tm_map(clean_docs, ...)  
 
-## Stopwords and stems
+enron_words <- enron_words %>%
+  tm_map(content_transformer(remove_link))  
 
-clean_docs <- tm_map(clean_docs, ...)
-clean_docs <- tm_map(clean_docs, ...)
+enron_words <- enron_words %>%
+  tm_map(...)
+
+## Stopwords and Stems
+
+enron_words <- enron_words %>%
+  tm_map(stemDocument) %>%
+  tm_map(removeWords, stopwords("english"))
 
 ## Bag-of-Words
 
-dtm <- ...(clean_docs)
+dtm <- DocumentTermMatrix(enron_words)
 
-char <- ...(clean_docs, ...)
-...
+## Long Form
 
-inlier <- function(x) {
-  n <- ...(content(x))
-  ...
-}
-clean_docs <- tm_filter(clean_docs, ...)
-dtm <- DocumentTermMatrix(clean_docs)
-...
-...
+library(tidytext)
+library(dplyr)
 
-## Term correlations
+dtt <- tidy(dtm)
+words <- dtt %>%
+  group_by(term) %>%
+  summarise(
+    n = n(),
+    total = sum(count)) %>%
+  mutate(nchar = nchar(term))
 
-assoc <- findAssocs(dense_dtm, ..., 0.2)
+library(ggplot2)
 
+ggplot(words, aes(x = nchar)) +
+  geom_histogram(binwidth = 1)
+
+dtt_trimmed <- words %>%
+  filter(
+    nchar < 16,
+    n > 1,
+    total > 3) %>%
+  select(term) %>%
+  inner_join(dtt)
+
+dtm_trimmed <- dtt_trimmed %>%
+  cast_dtm(document, term, count)
+
+## Term Correlations
+
+word_assoc <- findAssocs(dtm_trimmed, 'ken', 0.6)
+word_assoc <- data.frame(
+  word = names(word_assoc[[1]]),
+  assoc = word_assoc,
+  row.names = NULL)
 
 ## Latent Dirichlet allocation
 
-library(...)
+library(topicmodels)
 
-k = 4
-...
+seed = 12345
+fit = LDA(dtm_trimmed, k = 5, control = list(seed=seed))
+email_topics <- as.data.frame(
+  posterior(fit, dtm_trimmed)$topics)
 
-topics <- posterior(...)...
-topics <- ...(topics)
-colnames(topics) <- ...
+library(ggwordcloud)
+
+library(ggwordcloud)
+
+library(ggwordcloud)
+
+ggplot(word_assoc,
+       aes(label = word, size = ken)) +
+  geom_text_wordcloud_area()
+
+seed = 12345
+fit = LDA(dtm_trimmed, k = 5, control = list(seed=seed))
+
+email_topics <- as.data.frame(
+  posterior(fit, dtm_trimmed)$topics)
+
+library(ggwordcloud)
+
+topics <- tidy(fit) %>%
+  filter(beta > 0.004)
+
+ggplot(topics,
+       aes(size = beta, label = term)) +
+  geom_text_wordcloud_area(rm_outside = TRUE) +
+  facet_wrap(vars(topic))
+
+
+topics <- ...(fit) %>%
+  filter(beta > 0.004)
+
+ggplot(topics,
+  aes(size = ..., label = ...)) +
+  geom_text_wordcloud_area(rm_outside = TRUE) +
+  facet_wrap(vars(topic))
